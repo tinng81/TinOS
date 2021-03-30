@@ -4,7 +4,7 @@
 . ../lfs-env
 
 # Create limited directories under root
-mkdir -pv $LFS/{bin,etc,lib,sbin,usr,var, tools}
+mkdir -pv $LFS/{bin,etc,lib,sbin,usr,var,tools}
 case $(uname -m) in
   x86_64) mkdir -pv $LFS/lib64 ;;
 esac
