@@ -4,12 +4,12 @@
 . ../lfs-env
 
 # Create Bash Profile file 
-cat > ~/.bash_profile.tmp << "EOF"
+cat > ~/.bash_profile << "EOF"
 exec env -i HOME=$HOME TERM=$TERM PS1='\u:\w\$ ' /bin/bash
 EOF
 
 # Create Bash Run Commands file
-cat > ~/.bashrc.tmp << "EOF"
+cat > ~/.bashrc << "EOF"
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -21,3 +21,5 @@ PATH=$LFS/tools/bin:$PATH
 export LFS LC_ALL LFS_TGT PATH
 EOF
 
+# Source to new shell
+source ~/.bash_profile
