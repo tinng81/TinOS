@@ -18,4 +18,8 @@ esac
 # Add password to created user
 passwd "${1:-$default_user}"
 
+# Additional check
+ls -lah $LFS
 
+# Now login as lfs user
+su - $default_user
