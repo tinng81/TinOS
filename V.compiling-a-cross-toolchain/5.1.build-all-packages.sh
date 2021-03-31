@@ -3,38 +3,180 @@
 
 . ../lfs-env
 
-function build_all_packages(){
+function build_all_packages() {
+  # Aggregated dir for multiple packages
+  # NOTE this might be accidentally deleted by calling packages
+  mkdir -p -v $LFS/sources/gcc
+
   pushd $LFS/sources
-    # grep -oP "([^\/]+$)" wget-list | sort -f > tarball
-    # ls | sort -f > manifest
+    grep -oP "([^\/]+$)" wget-list > tarball
   
-    for tar_name in *.{bz2,gz,xz}; do
+    for tar_name in $(cat tarball); do
       tar_dir=${tar_name%.tar.*}
+      tar_script=${tar_dir%-*}
+
+      echo "$tar_dir"
+      echo "$tar_script"
   
       # Create and extract to folder
       # NOTE strip parent folder of all tarball
       # FIXME ensure none of the tarball missing a parent folder
-      #mkdir -v $tar_dir
-      #tar xvf $tar_name -C $tar_dir --strip 1
+      mkdir -v $tar_dir
+      tar xvf $tar_name -C $tar_dir --strip 1
   
       # Start compilation for each package
       # NOTE each dir has a matching script with their name
       # TODO might consider strip version in folder/script name
       # NOTE time function reveals Standard Build Unit for each package
       pushd $tar_dir 
-        time {$tar_dir}
+        time {
+          "$tar_script"
+        }
       popd
   
       # FIXME remove after development
       exit
     done
-    
   popd
 }
 
-function elfutils-0.180()
-{
-  echo "WD"
+
+function binutils() {
+  mkdir -v build
+  cd build
+
+  ../configure --prefix=$LFS/tools       \
+             --with-sysroot=$LFS        \
+             --target=$LFS_TGT          \
+             --disable-nls              \
+             --disable-werror
+  make
+  make install
+}
+
+function mpfr() {
+  mv -v $PWD ../gcc/mpfr
+}
+
+function gmp() {
+  mv -v $PWD ../gcc/gmp
+}
+
+function mpc() {
+  mv -v $PWD ../gcc/mpc
+}
+
+function gcc() {
+  case $(uname -m) in
+  x86_64)
+    sed -e '/m64=/s/lib64/lib/' \
+        -i.orig gcc/config/i386/t-linux64
+  ;;
+  esac
+
+  # Migrate from extracted directory to gcc
+  cp -r $PWD/* ../gcc
+  pushd $LFS/sources/gcc
+
+  mkdir -v build
+  cd       build
+
+  ../configure                                     \
+    --target=$LFS_TGT                              \
+    --prefix=$LFS/tools                            \
+    --with-glibc-version=2.11                      \
+    --with-sysroot=$LFS                            \
+    --with-newlib                                  \
+    --without-headers                              \
+    --enable-initfini-array                        \
+    --disable-nls                                  \
+    --disable-shared                               \
+    --disable-multilib                             \
+    --disable-decimal-float                        \
+    --disable-threads                              \
+    --disable-libatomic                            \
+    --disable-libgomp                              \
+    --disable-libquadmath                          \
+    --disable-libssp                               \
+    --disable-libvtv                               \
+    --disable-libstdcxx                            \
+    --enable-languages=c,c++
+
+  make
+  make install
+
+  cd ..
+  cat gcc/limitx.h gcc/glimits.h gcc/limity.h > \
+    `dirname $($LFS_TGT-gcc -print-libgcc-file-name)`/install-tools/include/limits.h
+}
+
+function linux() {
+  make mrproper
+
+  make headers
+  find usr/include -name '.*' -delete
+  rm usr/include/Makefile
+  cp -rv usr/include $LFS/usr
+}
+
+function glibc() {
+  case $(uname -m) in
+    i?86)   ln -sfv ld-linux.so.2 $LFS/lib/ld-lsb.so.3
+    ;;
+    x86_64) ln -sfv ../lib/ld-linux-x86-64.so.2 $LFS/lib64
+            ln -sfv ../lib/ld-linux-x86-64.so.2 $LFS/lib64/ld-lsb-x86-64.so.3
+    ;;
+  esac
+
+  patch -Np1 -i ../glibc-2.32-fhs-1.patch
+
+  mkdir -v build
+  cd build
+
+  ../configure                             \
+      --prefix=/usr                      \
+      --host=$LFS_TGT                    \
+      --build=$(../scripts/config.guess) \
+      --enable-kernel=3.2                \
+      --with-headers=$LFS/usr/include    \
+      libc_cv_slibdir=/lib
+
+  make
+  make DESTDIR=$LFS install
+
+  # TODO Add critical interrupt when sanitary check not passed
+  echo 'int main(){}' > dummy.c
+  $LFS_TGT-gcc dummy.c
+  readelf -l a.out | grep '/ld-linux' # Success output [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+  rm -v dummy.c a.out
+
+  $LFS/tools/libexec/gcc/$LFS_TGT/10.2.0/install-tools/mkheaders
+
+  # NOTE chained calling function with already extracted tarball
+  # TODO Better practice
+  libstdc
+}
+
+# Libstd++ Pass 1
+function libstdc() {
+  # NOTE compiled in GCC folder
+  pushd $LFS/sources/gcc
+      
+    mkdir -v build-libstdc
+    cd build-libstdc
+
+    ../libstdc++-v3/configure         \
+      --host=$LFS_TGT                 \
+      --build=$(../config.guess)      \
+      --prefix=/usr                   \
+      --disable-multilib              \
+      --disable-nls                   \
+      --disable-libstdcxx-pch         \
+      --with-gxx-include-dir=/tools/$LFS_TGT/include/c++/10.2.0
+
+    make
+    make DESTDIR=$LFS install
+  popd
 }
 
 build_all_packages; exit
