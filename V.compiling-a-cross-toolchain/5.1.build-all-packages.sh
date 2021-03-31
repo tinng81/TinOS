@@ -5,6 +5,7 @@
 
 function build_all_packages() {
   # Aggregated dir for multiple packages
+  # NOTE this might be accidentally deleted by calling packages
   mkdir -p -v $LFS/sources/gcc
 
   pushd $LFS/sources
@@ -150,16 +151,19 @@ function glibc() {
   rm -v dummy.c a.out
 
   $LFS/tools/libexec/gcc/$LFS_TGT/10.2.0/install-tools/mkheaders
+
+  # NOTE chained calling function with already extracted tarball
+  # TODO Better practice
+  libstdc
 }
 
+# Libstd++ Pass 1
 function libstdc() {
-  pushd $LFS/sources/gcc-10.2.0
-    
-    # TODO Remove this if not necessary, i.e. built in different subfolder
-    rm -rf build
-    
-    mkdir -v build
-    cd build
+  # NOTE compiled in GCC folder
+  pushd $LFS/sources/gcc
+      
+    mkdir -v build-libstdc
+    cd build-libstdc
 
     ../libstdc++-v3/configure         \
       --host=$LFS_TGT                 \
